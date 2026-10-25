@@ -1,0 +1,18 @@
+import {webcrypto} from 'node:crypto';
+import assert from 'node:assert/strict';
+import worker from '../cloud/worker.mjs';
+if (!globalThis.crypto) Object.defineProperty(globalThis,"crypto",{value:webcrypto});
+const token='test-token-not-a-real-credential-123456789';
+let puts=[],deletes=[];
+const env={UPLOAD_TOKEN:token,RECORDINGS:{put:async(...x)=>puts.push(x),get:async()=>null,list:async()=>({objects:[{key:'old',customMetadata:{end:String(Date.now()-31*86400000)}},{key:'new',customMetadata:{end:String(Date.now())}},{key:'unknown'}],truncated:false}),delete:async x=>deletes.push(x)}};
+const start=Date.now()-60000,url='https://recorder.test/recordings/usb/'+start+'.mp4';
+assert.equal((await worker.fetch(new Request(url),env)).status,401);
+assert.equal((await worker.fetch(new Request(url,{headers:{Authorization:'Bearer wrong'}}),env)).status,401);
+const headers={Authorization:'Bearer '+token,'X-Recording-End':String(start+59000),'Content-Length':'1024'};
+assert.equal((await worker.fetch(new Request(url,{method:'PUT',headers,body:new Uint8Array(1024)}),env)).status,204);
+assert.equal(puts.length,1);assert.equal(puts[0][0],'usb/'+start+'.mp4');
+assert.equal((await worker.fetch(new Request(url,{method:'PUT',headers:{...headers,'X-Recording-End':'-1'},body:'bad'}),env)).status,400);
+assert.equal((await worker.fetch(new Request('https://recorder.test/recordings/../../secret',{headers}),env)).status,404);
+assert.equal((await worker.fetch(new Request(url,{method:'POST',headers}),env)).status,405);
+await worker.scheduled({},env,{});assert.deepEqual(deletes,[['old']]);
+console.log('Cloud worker: authentication, metadata validation, path isolation, upload and retention passed.');

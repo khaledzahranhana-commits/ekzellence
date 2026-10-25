@@ -1,0 +1,10 @@
+name = "ekzellence-watch-backup"
+main = "worker.mjs"
+compatibility_date = "2026-10-25"
+[[r2_buckets]]
+binding = "RECORDINGS"
+bucket_name = "ekzellence-watch-recordings"
+[triggers]
+crons = ["15 3 * * *"]
+# Set a strong UPLOAD_TOKEN with `wrangler secret put UPLOAD_TOKEN`.
+# Do not make this bucket public. Deployment is optional and not performed automatically.
