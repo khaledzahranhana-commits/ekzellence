@@ -1,0 +1,27 @@
+name = "ekzellence-watch-backup"
+main = "worker.mjs"
+compatibility_date = "2026-10-25"
+[[r2_buckets]]
+binding = "RECORDINGS"
+bucket_name = "ekzellence-watch-recordings"
+[triggers]
+crons = ["15 3 * * *"]
+# Set a strong UPLOAD_TOKEN with `wrangler secret put UPLOAD_TOKEN`.
+# Do not make this bucket public. Deployment is optional and not performed automatically.
+
+[[durable_objects.bindings]]
+name = "SECURITY_GATE"
+class_name = "SecurityGate"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SecurityGate"]
+# Required secrets: UPLOAD_TOKEN, VIEW_PASSWORD_RECORD, DELETE_PIN_RECORD, SESSION_SECRET
+
+[[durable_objects.bindings]]
+name = "LIVE_FRAMES"
+class_name = "LiveFrames"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["LiveFrames"]
