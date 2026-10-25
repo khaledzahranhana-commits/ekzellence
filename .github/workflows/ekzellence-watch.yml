@@ -25,6 +25,7 @@ jobs:
       - run: sdkmanager 'platforms;android-34' 'build-tools;34.0.0'
       - run: gradle :app:assembleDebug
       - run: node tests/worker.test.mjs
+      - run: python3 tests/queue.test.py
       - uses: actions/upload-artifact@v4
         with:
           name: eKZellence-Watch-beta

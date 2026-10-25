@@ -1,84 +1,84 @@
 # eKZellence Watch
 
-Android camera recorder and password-protected browser viewer for Khaled Zahran.
+Android camera recorder with a private Cloudflare live viewer and recording archive.
 
-**Version 0.1.0 beta. This is an installable engineering build, not a production security system. USB compatibility, screen-off recording, thermal behavior, simultaneous cameras and SD persistence require tests on the actual Galaxy Tab A8 SM-X205 / Android 14.**
+**0.2.0 beta — cloud infrastructure is prepared in source, not deployed. No Cloudflare account connection or production URL has been provisioned. The Samsung Galaxy Tab A8 SM-X205 and supplied USB camera still require physical testing.**
 
-## Included
+## How it works
 
-- UVC USB webcam capture with explicit Android USB permission.
-- One USB camera and up to three H.264 RTSP-over-TCP cameras; hardware capacity is not guaranteed.
-- Camera names, individual start/stop controls, reconnect attempts for RTSP and status indicators.
-- MP4 recording in approximately one-minute segments, without audio.
-- Live JPEG preview in the tablet and authenticated browsers at approximately two frames per second. This beta does not provide full-frame-rate browser streaming.
-- Local password setup on the tablet, PBKDF2 password hashing, encrypted camera/cloud credentials, expiring browser sessions, login attempt limiting and CSRF checks.
-- HTTPS with a device-generated, self-signed certificate. The Android WebView pins its own certificate. Browsers must trust the tablet certificate; there is no public certificate or public service provisioned.
-- Android folder picker for SD recordings. UUID folders prevent names from causing path traversal; names are displayed through the database.
-- Recordings filtered by camera and date, video playback, range requests, full-file download and keyframe-aligned video clip exports.
-- Deletion of finalized recordings older than 30 days, on startup and every 24 hours while the service runs. Capture pauses below 512 MB rather than silently erasing newer footage.
-- Optional private Cloudflare R2 backup uploader and Worker source, disabled by default.
+Cloudflare R2 is the primary recording archive when cloud mode is enabled. The Android tablet records short local MP4 segments, targeting approximately 10 seconds, and immediately queues each completed segment for upload. This temporary local encoding buffer is required even while online. Upload speed, camera keyframes and finalization affect the delay; there is no guarantee that every captured frame is already in the cloud.
 
-## Install and first run
+A SHA-256 receipt confirms the object key, size and checksum after R2 accepts the upload. Only then does the tablet mark it uploaded and remove its temporary local copy. The recording remains accessible from the cloud portal. Interrupted uploads retry the entire short segment under the same immutable key. An identical retry returns the same receipt; changed content cannot replace an existing recording.
 
-1. Transfer the supplied APK to the Samsung tablet. Allow installation from that source when Android asks. This debug-signed beta is not listed on Google Play.
-2. Open **eKZellence Watch** and allow the camera and recording notification permissions.
-3. Create a password of at least eight characters. The only account is the recorder owner; this version does not offer separate viewer accounts or password recovery.
-4. Connect the USB webcam with an OTG data adapter. Tap **Start recording**, and allow USB device access. Confirm both the live image and new MP4 files.
-5. Wait about a minute and check **Recordings**. Play and download one file before relying on the recorder.
-6. To use SD storage, stop cameras, choose a writable folder in **Settings → Choose SD folder**, then start recording again. Keep at least 512 MB free in internal working storage as well.
-7. After a tablet restart or Android force-stop, open the app and start cameras manually. Capture does not silently restart at boot.
+When internet connectivity drops, the tablet retains completed recordings and queue state in SQLite. Capture continues until local free space reaches the 512 MB reserve. On reconnection the active recorder attempts uploads immediately and continues draining the backlog. Android WorkManager also persists network-constrained recovery work across ordinary process death and reboot; Android controls when these background jobs run. Force-stopping the app prevents background work until it is reopened. Queued files are never deleted by 30-day local retention while cloud mode is enabled.
 
-A powered USB hub may be required to power the camera and tablet together. Charging while acting as USB host is hardware-dependent and has not been verified for this tablet. Screen-off operation is implemented through a foreground service and wake lock, but Samsung battery management and overnight temperature testing remain necessary.
+Live preview uses a separate authenticated JPEG relay through Cloudflare Durable Objects. Only the latest preview image is held temporarily in memory; it is not the permanent recording archive. Remote viewers do not need a VPN or access to the home router. Stale live frames are hidden after five seconds. The beta previews about 1–2 images per second, not full-frame-rate video. Live preview stops while the tablet is offline, but previously uploaded recordings remain accessible.
 
-## View from a new phone
+## Separate credentials
 
-On the same Wi-Fi, open an address displayed in **Settings → Your recorder address**. Verify it belongs to your tablet, trust its certificate if appropriate, and enter the recorder password. The phone does not need the Android APK. Use **Recordings** to play, download or extract footage.
+1. **Tablet app password:** protects local recorder controls.
+2. **Cloud viewing password:** protects internet live view and cloud recordings. It must differ from the tablet password.
+3. **Deletion PIN:** separately confirms manual deletion from the cloud portal. It must differ from both passwords.
+4. **Device upload token:** stored encrypted on the tablet. It can upload new recordings and preview frames, but cannot read, delete or overwrite existing cloud recordings.
 
-Away from home, establish a private VPN connection between the tablet and the viewing device, for example with Tailscale. The tablet VPN address should appear in Settings. This project does not configure the VPN, a domain, router port forwarding, or an internet relay. Do not expose the raw recorder port to the public internet.
+The cloud uses PBKDF2 password records, signed one-hour HttpOnly sessions, CSRF checks, persisted attempt limits and a private R2 bucket. The deletion PIN is verified on the Worker and is never stored by the tablet. Changing the cloud password invalidates existing signed sessions.
 
-The tablet must remain powered, with its camera connected. Remotely viewing recordings requires that their SD storage remains inserted and readable. A downloaded phone copy is independent of the recorder's retention cleanup.
+These are application-level permissions. The Cloudflare account owner retains administrative control of the account and bucket. Automated expiration after 30 days follows the configured retention policy without prompting for the manual deletion PIN.
 
-## Add Wi-Fi cameras
+## Theft and outages
 
-The camera must expose an **H.264 RTSP** stream. Enter its full address, for example `rtsp://USERNAME:PASSWORD@CAMERA_IP:554/stream1`. Use the camera manufacturer's actual stream path. Wi-Fi alone does not imply RTSP support; proprietary cloud-only cameras may not work. H.265, ONVIF auto-discovery, audio, PTZ, motion detection and notification delivery are not included in this beta.
+If the tablet is stolen, footage that has already finished uploading remains in R2 and can be viewed from another device. Its upload token alone does not grant archive access or deletion rights. Footage captured while offline, or still in an unfinished/unuploaded segment, cannot be recovered from the cloud unless it successfully uploads first. This app cannot upload without internet or recover physical storage after theft.
 
-The custom transport supports RTP/TCP single-NAL, STAP-A and FU-A packets, SPS/PPS from SDP or the stream, and Basic or MD5 Digest authentication. Stream settings should remain fixed during a recording session.
+## Recorder features
 
-## Storage planning
+- One UVC USB webcam and up to three H.264 RTSP-over-TCP cameras, with individual names and controls. Hardware throughput is not guaranteed.
+- Video-only MP4 recording in short segments. Screen-off operation uses a foreground service and wake lock; Samsung battery management, USB power and overnight heat require testing.
+- Tablet memory or a selected SD folder for temporary offline storage.
+- Per-camera/date local archive and queued footage playback, full downloads and keyframe-aligned clip exports for files still available locally.
+- Cloud portal for internet live JPEG previews, per-camera/date recordings, range-based playback, downloads and PIN-confirmed deletion. Cloud clip extraction is not implemented; download the recording first.
+- Daily cloud expiration of recordings older than 30 days. Recovery queue retries and periodic Android fallback work.
+- Automatic RTSP reconnection and visible storage/upload status. Recording stops before exhausting local storage instead of discarding queued footage.
 
-One stream at 1 Mbps uses approximately **10.8 GB/day or 324 GB/30 days**, before filesystem overhead. USB capture targets 1 Mbps / 15 fps, subject to encoder behavior. RTSP recording retains the camera's original bitrate. Two 1 Mbps cameras use about 648 GB/month. A nominal 512 GB card does not guarantee 30 days across multiple cameras.
+H.265, ONVIF auto-discovery, audio, PTZ, motion alerts and automatic camera capture after reboot are not included. Queued upload work can resume independently; reopening the app and starting cameras is still required to resume capture after reboot.
 
-This version keeps recent footage rather than deleting it early when the card fills. A visible warning appears below 1 GB and recording pauses below 512 MB. SD free-space availability can be unknown for some document providers; write failures also stop recording and remain visible in the camera status. Internal pending files are retained if finalization fails; incomplete MP4 files after sudden power loss may not be playable.
+## Install / update
 
-## Optional cloud backup
+Install the supplied `eKZellence-Watch-0.2.0-beta.apk` on the tablet. It uses the same beta signing key as 0.1 in this workspace and migrates the recordings database from schema 1 to schema 2 without clearing it. Do not uninstall the old app before updating, because uninstalling removes app-owned internal footage and its index.
 
-The Android app can upload finalized files over Wi-Fi to the included `cloud/worker.mjs` endpoint. **Nothing is deployed and no footage is uploaded by default.** R2 storage and network traffic may incur charges. This is backup only: cloud library browsing and offsite live relay are not part of this version.
+Allow camera and recording notification permissions, create the tablet password, connect the webcam through an OTG data adapter and press **Start recording**. Allow USB device access when prompted. Confirm a live image and a playable finalized recording before relying on it.
 
-1. Create a private R2 bucket named `ekzellence-watch-recordings`, or update `cloud/wrangler.toml`.
-2. Set a randomly generated token of at least 24 characters using `wrangler secret put UPLOAD_TOKEN`.
-3. Deploy the Worker after reviewing account costs and access. The Worker requires the token for every upload/download; do not make the bucket public.
-4. Enter its HTTPS URL and token in the recorder's Cloud section, and explicitly enable backup.
-5. Verify a successful upload before relying on it. Failed uploads retry later. The Worker rejects files larger than 250 MiB.
+To choose an SD folder, stop all cameras and use Settings. USB host plus simultaneous tablet charging is hardware-dependent and has not been tested. A powered hub may be required.
 
-The scheduled Worker removes objects whose recording end timestamp is older than 30 days. There is no indefinite cloud archive. If the service is offline or backup falls behind retention, expired local files can be deleted before they are backed up. A factory reset or uninstall removes the local index and encrypted credentials; cloud objects remain until their retention cleanup.
+## Deploy the cloud service
 
-## Build
+Deployment requires access to the user's Cloudflare account. No account login, tokens, bucket or DNS changes have been performed by this project.
 
-JDK 17, Android SDK 34 and internet access for Maven dependencies are required.
+From `cloud/`, with authenticated Wrangler:
 
 ```sh
-./gradlew :app:assembleDebug
+wrangler r2 bucket create ekzellence-watch-recordings
+python3 create-secrets.py
+wrangler deploy
+wrangler secret bulk .cloud-secrets.json
 ```
 
-Output: `app/build/outputs/apk/debug/app-debug.apk`.
+The secret generator asks for the tablet password only to compare it, then creates a different cloud password record, a different deletion PIN record, a random upload token and a session signing secret. It does not save the tablet password. The output `.cloud-secrets.json` is private and ignored by git; never commit it. `wrangler.toml` binds the private R2 bucket, persisted security gate and transient live-frame objects.
 
-Dependencies: UVCAndroid 1.0.13 (including native USB/video components), NanoHTTPD 2.3.1, AndroidX DocumentFile and Kotlin BOM. Preserve the upstream licenses and notices. Debug signing is for testing; distribute production updates with a stable, private release signing key kept outside the repository.
+After deployment, enter the HTTPS Worker origin and **UPLOAD_TOKEN only** in the tablet's cloud settings, and enable cloud recording. The viewing password and deletion PIN are not put on the tablet. Open that HTTPS origin on the phone and use the separate cloud password. It works through the mobile browser; this project does not include a native iOS companion app.
 
-## Validation
+Enabling cloud mode makes R2 the main archive and clears local copies only after verified upload. Disabling cloud mode stops uploads; it does not delete existing cloud objects. Live frames and cloud storage, requests, Durable Objects and bandwidth may incur charges. Sufficient upstream bandwidth is needed to upload new recordings and clear an outage backlog at the same time.
 
-- The APK build is checked with Gradle and Android SDK tools.
-- `tests/CoreTest.java` checks exact retention boundaries, multi-camera capacity estimation, H.264 SPS parsing and malformed input against a generated real H.264 fixture.
-- `node tests/worker.test.mjs` checks cloud authorization, metadata validation, safe object paths and retention selection.
-- Browser flow checks cover setup/login, names, camera controls, date filtering, settings and responsive layout using test fixtures. They do not certify physical camera operation.
+One 1 Mbps recording stream is about 10.8 GB/day or 324 GB/30 days, before overhead and live-preview traffic. RTSP uses the source camera bitrate, so additional cameras can require substantially more storage and upload bandwidth. The Worker rejects segments larger than 250 MiB.
 
-Before normal use, perform an overnight test, review gaps across segment boundaries, unplug/reconnect the camera, restart the tablet, remove/reinsert the SD card safely, and verify a download on the new phone. Uninstalling clears app-owned internal recordings and database; export any important files first.
+## Build and validation
+
+JDK 17 and Android SDK 34:
+
+```sh
+./gradlew clean :app:assembleDebug :app:lintDebug
+node tests/worker.test.mjs
+```
+
+The source includes tests for immutable uploads, checksum receipts, retries, upload-only permissions, cloud login, separate deletion PIN, CSRF, range playback, stale live frames, persisted attempt limits and 30-day retention. Browser tests cover tablet controls, safe names, responsive layout and cloud login/deletion flows using fixtures. Core tests check retention boundaries and real H.264 SPS parsing.
+
+The APK is debug-signed for evaluation. A production release needs a stable private signing key, third-party license review, real-device recording and outage tests, performance/security review, and monitoring. Tests performed without physical cameras do not certify continuous capture or live service operation.

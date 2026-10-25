@@ -10,3 +10,4 @@ This application depends on the following projects. Their copyrights and license
 - **Gradle Wrapper 8.7**, Gradle Inc., Apache License 2.0. https://github.com/gradle/gradle
 
 This beta is supplied for device evaluation. A commercial release requires a full third-party license audit, release signing, security review and hardware validation.
+- **AndroidX WorkManager 2.9.1**, Android Open Source Project, Apache License 2.0. Used for persistent network-constrained upload recovery.

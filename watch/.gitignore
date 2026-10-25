@@ -7,3 +7,4 @@ local.properties
 .env*
 .dev.vars*
 node_modules/
+.cloud-secrets.json
